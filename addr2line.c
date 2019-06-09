@@ -35,19 +35,19 @@ static void err_handler(Dwarf_Error err, Dwarf_Ptr errarg)
 static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
 {
     int ret;
-    Dwarf_Addr lowpc = UINT64_MAX, highpc;
+    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR, cu_highpc;
     enum Dwarf_Form_Class highpc_cls;
-    ret = dwarf_lowpc(die, &lowpc, NULL);
+    ret = dwarf_lowpc(die, &cu_lowpc, NULL);
     if (ret == DW_DLV_OK) {
-        if (pc == lowpc) {
+        if (pc == cu_lowpc) {
             return true;
         }
-        ret = dwarf_highpc_b(die, &highpc, NULL, &highpc_cls, NULL);
+        ret = dwarf_highpc_b(die, &cu_highpc, NULL, &highpc_cls, NULL);
         if (ret == DW_DLV_OK) {
             if (highpc_cls == DW_FORM_CLASS_CONSTANT) {
-                highpc += lowpc;
+                cu_highpc += cu_lowpc;
             }
-            if (pc >= lowpc && pc < highpc) {
+            if (pc >= cu_lowpc && pc < cu_highpc) {
                 return true;
             }
         }
@@ -58,36 +58,34 @@ static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
         if (dwarf_global_formref(attr, &offset, NULL) == DW_DLV_OK) {
             Dwarf_Signed count = 0;
             Dwarf_Ranges *ranges = 0;
-            Dwarf_Addr baseaddr = UINT64_MAX;
-            if (lowpc != UINT64_MAX) {
-                baseaddr = lowpc;
+            Dwarf_Addr baseaddr = 0;
+            if (cu_lowpc != DW_DLV_BADADDR) {
+                baseaddr = cu_lowpc;
             }
             ret = dwarf_get_ranges_a(dbg, offset, die,
                                      &ranges, &count, NULL, NULL);
             for(int i = 0; i < count; i++) {
                 Dwarf_Ranges *cur = ranges + i;
                 if (cur->dwr_type == DW_RANGES_ENTRY) {
-                    Dwarf_Addr lowpc, highpc;
-                    if (baseaddr == UINT64_MAX) {
-                        baseaddr = cur->dwr_addr1;
-                        lowpc = cur->dwr_addr1;
-                    } else {
-                        lowpc = baseaddr + cur->dwr_addr1;
-                    }
-                    highpc = baseaddr + cur->dwr_addr2;
-                    if (pc >= lowpc && pc < highpc) {
+                    Dwarf_Addr rng_lowpc, rng_highpc;
+                    rng_lowpc = baseaddr + cur->dwr_addr1;
+                    rng_highpc = baseaddr + cur->dwr_addr2;
+                    if (pc >= rng_lowpc && pc < rng_highpc) {
+                        dwarf_ranges_dealloc(dbg, ranges, count);
+                        dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
                         return true;
                     }
                 } else if (cur->dwr_type == DW_RANGES_ADDRESS_SELECTION) {
                     baseaddr = cur->dwr_addr2;
                 } else {  // DW_RANGES_END
-                    baseaddr = lowpc;
+                    baseaddr = cu_lowpc;
                 }
             }
             dwarf_ranges_dealloc(dbg, ranges, count);
         }
         dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
     }
+    return false;
 }
 
 static void print_line(Dwarf_Debug dbg, flagsT *flags, Dwarf_Line line, Dwarf_Addr pc)
@@ -130,22 +128,37 @@ static bool lookup_pc_cu(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc, Dwarf_Di
             dwarf_srclines_dealloc_b(ctxt);
             err_handler(err, NULL);
         }
+        Dwarf_Addr prev_lineaddr;
+        Dwarf_Line prev_line = 0;
         for (int i = 0; i < linecount; i++) {
             Dwarf_Line line = linebuf[i];
             Dwarf_Addr lineaddr;
             dwarf_lineaddr(line, &lineaddr, NULL);
             if (pc == lineaddr) {
-                is_found = true;
-                print_line(dbg, flags, line, pc);
-                break;
-            } else if (pc < lineaddr) {
-                if (i == 0) {
-                    break;
-                } else {
-                    is_found = true;
-                    print_line(dbg, flags, linebuf[i - 1], pc);
-                    break;
+                /* Print the last line entry containing current pc. */
+                Dwarf_Line last_pc_line = line;
+                for (int j = i + 1; j < linecount; j++) {
+                    Dwarf_Line j_line = linebuf[j];
+                    dwarf_lineaddr(j_line, &lineaddr, NULL);
+                    if (pc == lineaddr) {
+                        last_pc_line = j_line;
+                    }
                 }
+                is_found = true;
+                print_line(dbg, flags, last_pc_line, pc);
+                break;
+            } else if (prev_line && pc > prev_lineaddr && pc < lineaddr) {
+                is_found = true;
+                print_line(dbg, flags, prev_line, pc);
+                break;
+            }
+            Dwarf_Bool is_lne;
+            dwarf_lineendsequence(line, &is_lne, NULL);
+            if (is_lne) {
+                prev_line = 0;
+            } else {
+                prev_lineaddr = lineaddr;
+                prev_line = line;
             }
         }
     }
@@ -159,7 +172,8 @@ static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
     Dwarf_Unsigned next_cu_header;
     Dwarf_Half header_cu_type;
     int ret;
-    for (;;) {
+    int cu_i;
+    for (int cu_i = 0;; cu_i++) {
         ret = dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
                                      NULL, NULL, &next_cu_header, &header_cu_type, NULL);
         if (ret == DW_DLV_NO_ENTRY) {
@@ -168,7 +182,7 @@ static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
         Dwarf_Die cu_die = 0;
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
-            if (true || pc_in_die(dbg, cu_die, pc)) {
+            if (pc_in_die(dbg, cu_die, pc)) {
                 bool lookup_ret = lookup_pc_cu(dbg, flags, pc, cu_die);
                 dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
                 while (dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
@@ -226,20 +240,20 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
         Dwarf_Die cu_die = 0;
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
-            Dwarf_Addr lowpc = UINT64_MAX, highpc;
+            Dwarf_Addr cu_lowpc = DW_DLV_BADADDR, cu_highpc;
             enum Dwarf_Form_Class highpc_cls;
-            ret = dwarf_lowpc(cu_die, &lowpc, NULL);
+            ret = dwarf_lowpc(cu_die, &cu_lowpc, NULL);
             if (ret == DW_DLV_OK) {
-                if (lowpc < *lowest) {
-                    *lowest = lowpc;
+                if (cu_lowpc < *lowest) {
+                    *lowest = cu_lowpc;
                 }
-                ret = dwarf_highpc_b(cu_die, &highpc, NULL, &highpc_cls, NULL);
+                ret = dwarf_highpc_b(cu_die, &cu_highpc, NULL, &highpc_cls, NULL);
                 if (ret == DW_DLV_OK) {
                     if (highpc_cls == DW_FORM_CLASS_CONSTANT) {
-                        highpc += lowpc;
+                        cu_highpc += cu_lowpc;
                     }
-                    if (highpc > *highest) {
-                        *highest = highpc;
+                    if (cu_highpc > *highest) {
+                        *highest = cu_highpc;
                     }
                 }
             }
@@ -249,33 +263,28 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                 if (dwarf_global_formref(attr, &offset, NULL) == DW_DLV_OK) {
                     Dwarf_Signed count = 0;
                     Dwarf_Ranges *ranges = 0;
-                    Dwarf_Addr baseaddr = UINT64_MAX;
-                    if (lowpc != UINT64_MAX) {
-                        baseaddr = lowpc;
+                    Dwarf_Addr baseaddr = 0;
+                    if (cu_lowpc != DW_DLV_BADADDR) {
+                        baseaddr = cu_lowpc;
                     }
                     ret = dwarf_get_ranges_a(dbg, offset, cu_die,
                                              &ranges, &count, NULL, NULL);
                     for(int i = 0; i < count; i++) {
                         Dwarf_Ranges *cur = ranges + i;
                         if (cur->dwr_type == DW_RANGES_ENTRY) {
-                            Dwarf_Addr lowpc, highpc;
-                            if (baseaddr == UINT64_MAX) {
-                                baseaddr = cur->dwr_addr1;
-                                lowpc = cur->dwr_addr1;
-                            } else {
-                                lowpc = baseaddr + cur->dwr_addr1;
+                            Dwarf_Addr rng_lowpc, rng_highpc;
+                            rng_lowpc = baseaddr + cur->dwr_addr1;
+                            rng_highpc = baseaddr + cur->dwr_addr2;
+                            if (rng_lowpc < *lowest) {
+                                *lowest = rng_lowpc;
                             }
-                            highpc = baseaddr + cur->dwr_addr2;
-                            if (lowpc < *lowest) {
-                                *lowest = lowpc;
-                            }
-                            if (highpc > *highest) {
-                                *highest = highpc;
+                            if (rng_highpc > *highest) {
+                                *highest = rng_highpc;
                             }
                         } else if (cur->dwr_type == DW_RANGES_ADDRESS_SELECTION) {
                             baseaddr = cur->dwr_addr2;
                         } else {  // DW_RANGES_END
-                            baseaddr = lowpc;
+                            baseaddr = cu_lowpc;
                         }
                     }
                     dwarf_ranges_dealloc(dbg, ranges, count);
@@ -310,16 +319,24 @@ static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_tab
             err_handler(err, NULL);
         }
         Dwarf_Addr prev_lineaddr;
+        Dwarf_Line prev_line = 0;
         for (int i = 0; i < linecount; i++) {
             Dwarf_Line line = linebuf[i];
             Dwarf_Addr lineaddr;
             dwarf_lineaddr(line, &lineaddr, NULL);
-            if (i != 0) {
+            if (prev_line) {
                 for (Dwarf_Addr addr = prev_lineaddr; addr < lineaddr; addr++) {
                     lookup_table->table[addr - lookup_table->low] = linebuf[i - 1];
                 }
             }
-            prev_lineaddr = lineaddr;
+            Dwarf_Bool is_lne;
+            dwarf_lineendsequence(line, &is_lne, NULL);
+            if (is_lne) {
+                prev_line = 0;
+            } else {
+                prev_lineaddr = lineaddr;
+                prev_line = line;
+            }
         }
     }
 }
@@ -416,7 +433,6 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
         if (c == -1) {
             break;
         }
-        /* TODO: Add address flag and some more flags. */
         switch (c) {
         case 'a':
             flags->addresses = true;
@@ -461,7 +477,7 @@ int main(int argc, char *argv[])
         Dwarf_Addr pc = strtoull(pc_buf, &endptr, 16);
         bool is_found = false;
         if (endptr != pc_buf) {
-            if (lookup_table.table) {
+            if (flags.batchmode && lookup_table.table) {
                 if (pc >= lookup_table.low && pc < lookup_table.high) {
                     Dwarf_Line line = lookup_table.table[pc - lookup_table.low];
                     if (line) {

@@ -1,10 +1,11 @@
 IDIR=/usr/include/libdwarf
+LDIR=/usr/lib/
 CC=gcc
-CFLAGS=-O0 -g -I$(IDIR)
+CFLAGS=-O4 -g -I$(IDIR) -L$(LDIR)
 
 ODIR=obj
 
-LIBS=-ldwarf -lelf
+LIBS=/usr/lib/libdwarf.a /usr/lib/libelf.a /usr/lib/libz.a
 
 _OBJ = addr2line.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
