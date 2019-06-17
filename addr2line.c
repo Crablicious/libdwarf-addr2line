@@ -13,10 +13,14 @@
 
 
 #define MAX_ADDR_LEN 20
+#define BATCHMODE_HEURISTIC 100
 
 typedef struct flags {
     bool addresses;
     bool batchmode;
+
+    bool force_batchmode;
+    bool force_nobatchmode;
 } flagsT;
 
 typedef struct lookup_table {
@@ -93,7 +97,7 @@ static void print_line(Dwarf_Debug dbg, flagsT *flags, Dwarf_Line line, Dwarf_Ad
     char *linesrc;
     Dwarf_Unsigned lineno;
     if (flags->addresses) {
-        printf("0x%#016" DW_PR_DUx "\n", pc);
+        printf("%#018" DW_PR_DUx "\n", pc);
     }
     if (line) {
         dwarf_linesrc(line, &linesrc, NULL);
@@ -228,7 +232,7 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
     Dwarf_Bool is_info = true;
     Dwarf_Unsigned next_cu_header;
     Dwarf_Half header_cu_type;
-    *lowest = UINT64_MAX;
+    *lowest = DW_DLV_BADADDR;
     *highest = 0;
     int ret, cu_i;
     for (cu_i = 0;; cu_i++) {
@@ -296,7 +300,7 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
         }
     }
     *cu_cnt = cu_i;
-    return (*lowest != UINT64_MAX && *highest != 0);
+    return (*lowest != DW_DLV_BADADDR && *highest != 0);
 }
 
 static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_table, int cu_i, Dwarf_Die cu_die)
@@ -426,10 +430,11 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
             {
              {"addresses", no_argument, 0, 'a'},
              {"exe", required_argument, 0, 'e'},
-             {"nobatch", no_argument, 0, 'b'},
+             {"force-batch", no_argument, 0, 'b'},
+             {"force-no-batch", no_argument, 0, 'n'},
              {0, 0, 0, 0}
             };
-        c = getopt_long(argc, argv, "ae:b", longopts, &option_index);
+        c = getopt_long(argc, argv, "ae:bn", longopts, &option_index);
         if (c == -1) {
             break;
         }
@@ -441,7 +446,10 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
             *objfile = optarg;
             break;
         case 'b':
-            flags->batchmode = false;
+            flags->force_batchmode = true;
+            break;
+        case 'n':
+            flags->force_nobatchmode = true;
             break;
         case '?':
             break;
@@ -455,7 +463,6 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
 int main(int argc, char *argv[])
 {
     flagsT flags = {0};
-    flags.batchmode = true;
     char *objfile = "a.out";
     populate_options(argc, argv, &objfile, &flags);
 
@@ -466,12 +473,15 @@ int main(int argc, char *argv[])
         errx(EXIT_FAILURE, "%s not found", objfile);
     }
 
+    bool do_read_stdin = (optind >= argc);
+    if (! flags.force_nobatchmode && (flags.force_batchmode || do_read_stdin || (argc + BATCHMODE_HEURISTIC) > optind)) {
+        flags.batchmode = true;
+    }
     lookup_tableT lookup_table;
     if (flags.batchmode) {
         create_lookup_table(dbg, &lookup_table);
     }
 
-    bool do_read_stdin = (optind >= argc);
     char buf[MAX_ADDR_LEN], *pc_buf, *endptr;
     while ((pc_buf = get_pc_buf(argc, argv, buf, do_read_stdin))) {
         Dwarf_Addr pc = strtoull(pc_buf, &endptr, 16);
