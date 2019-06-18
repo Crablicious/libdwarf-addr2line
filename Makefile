@@ -1,11 +1,11 @@
 IDIR=/usr/include/libdwarf
 LDIR=/usr/lib/
 CC=gcc
-CFLAGS=-O0 -g -I$(IDIR) -L$(LDIR)
+CFLAGS=-O4 -g -I$(IDIR) -L$(LDIR)
+LDFLAGS=
 
 ODIR=obj
-
-LIBS=/usr/lib/libdwarf.a /usr/lib/libelf.a /usr/lib/libz.a
+LIBS=$(LDIR)/libdwarf.a $(LDIR)/libelf.a $(LDIR)/libz.a
 
 _OBJ = addr2line.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
@@ -14,12 +14,17 @@ $(ODIR)/%.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 addr2line: $(OBJ)
-	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
+	$(CC) -o $@ $^ $(CFLAGS) $(LDFLAGS) $(LIBS)
 
 .PHONY: clean run
 
 run: addr2line
 	./addr2line -a -e a.out 0x1510 0x1511
+
+docker:
+	docker build -f Dockerfile -t static-addr2line .
+	docker create --name static-addr2line-cont static-addr2line
+	docker cp static-addr2line-cont:/addr2line/addr2line docker-addr2line
 
 verify:
 	./addr2line -a -e /home/adwe/code/build/gdb/gdb/gdb <gdb_pcs.txt > batch.log
@@ -32,3 +37,5 @@ verify:
 
 clean:
 	rm -f $(ODIR)/*.o *~
+
+$(shell mkdir -p $(ODIR))
