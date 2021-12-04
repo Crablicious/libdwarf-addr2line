@@ -1,11 +1,14 @@
 IDIR=/usr/include/libdwarf
+IDIR=/home/davea/dwarf/code/src/lib/libdwarf
 LDIR=/usr/lib/
+LDIR=/var/tmp/bld/src/lib/libdwarf/.libs
 CC=gcc
-CFLAGS=-O4 -g -I$(IDIR) -L$(LDIR)
+CFLAGS=-O2 -g -I$(IDIR) -L$(LDIR)
 LDFLAGS=
+LIBNAME=libdwarf.a
 
 ODIR=obj
-LIBS=$(LDIR)/libdwarf.a $(LDIR)/libelf.a $(LDIR)/libz.a
+LIBS=$(LDIR)/$(LIBNAME) -lz
 
 _OBJ = addr2line.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
@@ -19,7 +22,8 @@ addr2line: $(OBJ)
 .PHONY: clean run
 
 run: addr2line
-	./addr2line -a -e a.out 0x1510 0x1511
+	#./addr2line -a -e a.out 0x1510 0x1511
+	./addr2line -a -e $(OBJ)  0x1510 0x1511
 
 docker:
 	docker build -f Dockerfile -t static-addr2line .

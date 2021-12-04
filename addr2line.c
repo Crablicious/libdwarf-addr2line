@@ -1,16 +1,17 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
+#include <stdbool.h> /* C99 for bool type */
 #include <unistd.h>
 #include <getopt.h>
 #include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <libdwarf.h>
-#include <dwarf.h>
-#include <libelf.h>
+#include "libdwarf.h"
+#include "dwarf.h"
 
+#define DW_PR_DUx "llx"
+#define DW_PR_DUu "llu"
 
 #define MAX_ADDR_LEN 20
 #define BATCHMODE_HEURISTIC 100
@@ -33,7 +34,8 @@ typedef struct lookup_table {
 
 static void err_handler(Dwarf_Error err, Dwarf_Ptr errarg)
 {
-    errx(EXIT_FAILURE, "libdwarf error: %d %s0", dwarf_errno(err), dwarf_errmsg(err));
+    errx(EXIT_FAILURE, "libdwarf error: %lu %s",
+        (unsigned long)dwarf_errno(err), dwarf_errmsg(err));
 }
 
 static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
@@ -63,31 +65,35 @@ static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
             Dwarf_Signed count = 0;
             Dwarf_Ranges *ranges = 0;
             Dwarf_Addr baseaddr = 0;
+            Dwarf_Off  realoffset = 0;
+            Dwarf_Unsigned bytecount = 0;
             if (cu_lowpc != DW_DLV_BADADDR) {
                 baseaddr = cu_lowpc;
             }
-            ret = dwarf_get_ranges_a(dbg, offset, die,
-                                     &ranges, &count, NULL, NULL);
-            for(int i = 0; i < count; i++) {
+            ret = dwarf_get_ranges_b(dbg, offset, die,
+                &realoffset,
+                &ranges, &count, &bytecount, NULL);
+            for (int i = 0; i < count; i++) {
                 Dwarf_Ranges *cur = ranges + i;
                 if (cur->dwr_type == DW_RANGES_ENTRY) {
                     Dwarf_Addr rng_lowpc, rng_highpc;
                     rng_lowpc = baseaddr + cur->dwr_addr1;
                     rng_highpc = baseaddr + cur->dwr_addr2;
                     if (pc >= rng_lowpc && pc < rng_highpc) {
-                        dwarf_ranges_dealloc(dbg, ranges, count);
+                        dwarf_dealloc_ranges(dbg, ranges, count);
                         dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
                         return true;
                     }
-                } else if (cur->dwr_type == DW_RANGES_ADDRESS_SELECTION) {
+                } else if (cur->dwr_type == 
+                    DW_RANGES_ADDRESS_SELECTION) {
                     baseaddr = cur->dwr_addr2;
                 } else {  // DW_RANGES_END
                     baseaddr = cu_lowpc;
                 }
             }
-            dwarf_ranges_dealloc(dbg, ranges, count);
+            dwarf_dealloc_ranges(dbg, ranges, count);
         }
-        dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
+        dwarf_dealloc_attribute(attr);
     }
     return false;
 }
@@ -262,18 +268,23 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                 }
             }
             Dwarf_Attribute attr;
-            if (dwarf_attr(cu_die, DW_AT_ranges, &attr, NULL) == DW_DLV_OK) {
+            if (dwarf_attr(cu_die, DW_AT_ranges, &attr, NULL) == 
+                DW_DLV_OK) {
                 Dwarf_Unsigned offset;
-                if (dwarf_global_formref(attr, &offset, NULL) == DW_DLV_OK) {
+                if (dwarf_global_formref(attr, &offset, NULL) ==
+                    DW_DLV_OK) {
                     Dwarf_Signed count = 0;
                     Dwarf_Ranges *ranges = 0;
                     Dwarf_Addr baseaddr = 0;
+                    Dwarf_Off realoffset = 0;
+                    Dwarf_Unsigned bytecount = 0;
                     if (cu_lowpc != DW_DLV_BADADDR) {
                         baseaddr = cu_lowpc;
                     }
-                    ret = dwarf_get_ranges_a(dbg, offset, cu_die,
-                                             &ranges, &count, NULL, NULL);
-                    for(int i = 0; i < count; i++) {
+                    ret = dwarf_get_ranges_b(dbg, offset, cu_die,
+                        &realoffset,
+                        &ranges, &count, &bytecount,NULL);
+                    for (int i = 0; i < count; i++) {
                         Dwarf_Ranges *cur = ranges + i;
                         if (cur->dwr_type == DW_RANGES_ENTRY) {
                             Dwarf_Addr rng_lowpc, rng_highpc;
@@ -285,17 +296,18 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                             if (rng_highpc > *highest) {
                                 *highest = rng_highpc;
                             }
-                        } else if (cur->dwr_type == DW_RANGES_ADDRESS_SELECTION) {
+                        } else if (cur->dwr_type == 
+                            DW_RANGES_ADDRESS_SELECTION) {
                             baseaddr = cur->dwr_addr2;
                         } else {  // DW_RANGES_END
                             baseaddr = cu_lowpc;
                         }
                     }
-                    dwarf_ranges_dealloc(dbg, ranges, count);
+                    dwarf_dealloc_ranges(dbg, ranges, count);
                 }
-                dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
+                dwarf_dealloc_attribute( attr);
             }
-            dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+            dwarf_dealloc_die(cu_die);
             cu_die = 0;
         }
     }
@@ -367,7 +379,9 @@ static void populate_lookup_table(Dwarf_Debug dbg, lookup_tableT *lookup_table)
     }
 }
 
-static int create_lookup_table(Dwarf_Debug dbg, lookup_tableT *lookup_table)
+static int 
+create_lookup_table(Dwarf_Debug dbg,
+    lookup_tableT *lookup_table)
 {
     Dwarf_Addr low, high;
     int cu_cnt;
@@ -388,9 +402,11 @@ static int create_lookup_table(Dwarf_Debug dbg, lookup_tableT *lookup_table)
     lookup_table->high = high;
     populate_lookup_table(dbg, lookup_table);
     return 0;
- free_table_exit:
+
+    free_table_exit:
     free(lookup_table->table);
- exit:
+
+    exit:
     lookup_table->table = NULL;
     lookup_table->ctxts = NULL;
     return 1;
@@ -468,13 +484,16 @@ int main(int argc, char *argv[])
 
     int ret;
     Dwarf_Debug dbg;
-    ret = dwarf_init_path(objfile, NULL, 0, DW_DLC_READ, DW_GROUPNUMBER_ANY, err_handler, NULL, &dbg, 0, 0, 0, NULL);
+    ret = dwarf_init_path(objfile, NULL, 0, 
+        DW_GROUPNUMBER_ANY, err_handler, NULL, &dbg, NULL);
     if (ret == DW_DLV_NO_ENTRY) {
         errx(EXIT_FAILURE, "%s not found", objfile);
     }
 
     bool do_read_stdin = (optind >= argc);
-    if (! flags.force_nobatchmode && (flags.force_batchmode || do_read_stdin || (argc + BATCHMODE_HEURISTIC) > optind)) {
+    if (! flags.force_nobatchmode && 
+        (flags.force_batchmode || do_read_stdin ||
+        (argc + BATCHMODE_HEURISTIC) > optind)) {
         flags.batchmode = true;
     }
     lookup_tableT lookup_table;
@@ -506,6 +525,6 @@ int main(int argc, char *argv[])
     if (flags.batchmode && lookup_table.table) {
         delete_lookup_table(&lookup_table);
     }
-    dwarf_finish(dbg, NULL);
+    dwarf_finish(dbg);
     return 0;
 }
