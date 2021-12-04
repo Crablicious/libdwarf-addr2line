@@ -48,7 +48,8 @@ static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
         if (pc == cu_lowpc) {
             return true;
         }
-        ret = dwarf_highpc_b(die, &cu_highpc, NULL, &highpc_cls, NULL);
+        ret = dwarf_highpc_b(die, &cu_highpc,
+            NULL, &highpc_cls, NULL);
         if (ret == DW_DLV_OK) {
             if (highpc_cls == DW_FORM_CLASS_CONSTANT) {
                 cu_highpc += cu_lowpc;
@@ -84,7 +85,7 @@ static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
                         dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
                         return true;
                     }
-                } else if (cur->dwr_type == 
+                } else if (cur->dwr_type ==
                     DW_RANGES_ADDRESS_SELECTION) {
                     baseaddr = cur->dwr_addr2;
                 } else {  // DW_RANGES_END
@@ -98,7 +99,11 @@ static bool pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
     return false;
 }
 
-static void print_line(Dwarf_Debug dbg, flagsT *flags, Dwarf_Line line, Dwarf_Addr pc)
+static void
+print_line(Dwarf_Debug dbg,
+    flagsT *flags,
+    Dwarf_Line line,
+    Dwarf_Addr pc)
 {
     char *linesrc;
     Dwarf_Unsigned lineno;
@@ -118,13 +123,18 @@ static void print_line(Dwarf_Debug dbg, flagsT *flags, Dwarf_Line line, Dwarf_Ad
     }
 }
 
-static bool lookup_pc_cu(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc, Dwarf_Die cu_die)
+static bool
+lookup_pc_cu(Dwarf_Debug dbg,
+    flagsT *flags,
+    Dwarf_Addr pc,
+    Dwarf_Die cu_die)
 {
     int ret;
     Dwarf_Unsigned version;
     Dwarf_Small table_count;
     Dwarf_Line_Context ctxt;
-    ret = dwarf_srclines_b(cu_die, &version, &table_count, &ctxt, NULL);
+    ret = dwarf_srclines_b(cu_die, &version, &table_count,
+        &ctxt, NULL);
     if (ret == DW_DLV_NO_ENTRY) {
         return false;
     }
@@ -133,7 +143,8 @@ static bool lookup_pc_cu(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc, Dwarf_Di
         Dwarf_Line *linebuf = 0;
         Dwarf_Signed linecount = 0;
         Dwarf_Error err;
-        ret = dwarf_srclines_from_linecontext(ctxt, &linebuf, &linecount, &err);
+        ret = dwarf_srclines_from_linecontext(ctxt, &linebuf,
+            &linecount, &err);
         if (ret == DW_DLV_ERROR) {
             dwarf_srclines_dealloc_b(ctxt);
             err_handler(err, NULL);
@@ -157,7 +168,8 @@ static bool lookup_pc_cu(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc, Dwarf_Di
                 is_found = true;
                 print_line(dbg, flags, last_pc_line, pc);
                 break;
-            } else if (prev_line && pc > prev_lineaddr && pc < lineaddr) {
+            } else if (prev_line && pc > prev_lineaddr &&
+                pc < lineaddr) {
                 is_found = true;
                 print_line(dbg, flags, prev_line, pc);
                 break;
@@ -176,7 +188,10 @@ static bool lookup_pc_cu(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc, Dwarf_Di
     return is_found;
 }
 
-static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
+static bool
+lookup_pc(Dwarf_Debug dbg,
+    flagsT *flags,
+    Dwarf_Addr pc)
 {
     Dwarf_Bool is_info = true;
     Dwarf_Unsigned next_cu_header;
@@ -184,8 +199,9 @@ static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
     int ret;
     int cu_i;
     for (int cu_i = 0;; cu_i++) {
-        ret = dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
-                                     NULL, NULL, &next_cu_header, &header_cu_type, NULL);
+        ret = dwarf_next_cu_header_d(dbg, is_info, NULL,
+            NULL, NULL, NULL, NULL, NULL,
+            NULL, NULL, &next_cu_header, &header_cu_type, NULL);
         if (ret == DW_DLV_NO_ENTRY) {
             break;
         }
@@ -193,14 +209,17 @@ static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
             if (pc_in_die(dbg, cu_die, pc)) {
-                bool lookup_ret = lookup_pc_cu(dbg, flags, pc, cu_die);
-                dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
-                while (dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
-                                              NULL, NULL, &next_cu_header, &header_cu_type, NULL)
-                       != DW_DLV_NO_ENTRY) {}
+                bool lookup_ret = lookup_pc_cu(dbg, flags,
+                    pc, cu_die);
+                dwarf_dealloc_die(cu_die);
+                while (dwarf_next_cu_header_d(dbg, is_info,
+                    NULL, NULL, NULL, NULL, NULL, NULL,
+                    NULL, NULL, &next_cu_header,
+                    &header_cu_type, NULL)
+                    != DW_DLV_NO_ENTRY) {}
                 return lookup_ret;
             } else {
-                dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
+                dwarf_dealloc_die(cu_die);
                 cu_die = 0;
             }
         }
@@ -208,7 +227,10 @@ static bool lookup_pc(Dwarf_Debug dbg, flagsT *flags, Dwarf_Addr pc)
     return false;
 }
 
-static bool get_pc_range_die(Dwarf_Die die, Dwarf_Addr *low_out, Dwarf_Addr *high_out)
+static bool
+get_pc_range_die(Dwarf_Die die,
+    Dwarf_Addr *low_out,
+    Dwarf_Addr *high_out)
 {
     int ret;
     Dwarf_Addr lowpc, highpc;
@@ -233,7 +255,10 @@ static bool get_pc_range_die(Dwarf_Die die, Dwarf_Addr *low_out, Dwarf_Addr *hig
     return is_low_set && is_high_set;
 }
 
-static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highest, int *cu_cnt)
+static bool get_pc_range(Dwarf_Debug dbg,
+    Dwarf_Addr *lowest,
+    Dwarf_Addr *highest,
+    int *cu_cnt)
 {
     Dwarf_Bool is_info = true;
     Dwarf_Unsigned next_cu_header;
@@ -242,8 +267,9 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
     *highest = 0;
     int ret, cu_i;
     for (cu_i = 0;; cu_i++) {
-        ret = dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
-                                     NULL, NULL, &next_cu_header, &header_cu_type, NULL);
+        ret = dwarf_next_cu_header_d(dbg, is_info, NULL,
+            NULL, NULL, NULL, NULL, NULL,
+            NULL, NULL, &next_cu_header, &header_cu_type, NULL);
         if (ret == DW_DLV_NO_ENTRY) {
             break;
         }
@@ -257,7 +283,8 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                 if (cu_lowpc < *lowest) {
                     *lowest = cu_lowpc;
                 }
-                ret = dwarf_highpc_b(cu_die, &cu_highpc, NULL, &highpc_cls, NULL);
+                ret = dwarf_highpc_b(cu_die, &cu_highpc,
+                    NULL, &highpc_cls, NULL);
                 if (ret == DW_DLV_OK) {
                     if (highpc_cls == DW_FORM_CLASS_CONSTANT) {
                         cu_highpc += cu_lowpc;
@@ -268,7 +295,7 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                 }
             }
             Dwarf_Attribute attr;
-            if (dwarf_attr(cu_die, DW_AT_ranges, &attr, NULL) == 
+            if (dwarf_attr(cu_die, DW_AT_ranges, &attr, NULL) ==
                 DW_DLV_OK) {
                 Dwarf_Unsigned offset;
                 if (dwarf_global_formref(attr, &offset, NULL) ==
@@ -296,7 +323,7 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
                             if (rng_highpc > *highest) {
                                 *highest = rng_highpc;
                             }
-                        } else if (cur->dwr_type == 
+                        } else if (cur->dwr_type ==
                             DW_RANGES_ADDRESS_SELECTION) {
                             baseaddr = cur->dwr_addr2;
                         } else {  // DW_RANGES_END
@@ -315,12 +342,17 @@ static bool get_pc_range(Dwarf_Debug dbg, Dwarf_Addr *lowest, Dwarf_Addr *highes
     return (*lowest != DW_DLV_BADADDR && *highest != 0);
 }
 
-static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_table, int cu_i, Dwarf_Die cu_die)
+static void
+populate_lookup_table_die(Dwarf_Debug dbg,
+    lookup_tableT *lookup_table,
+    int cu_i,
+    Dwarf_Die cu_die)
 {
     int ret;
     Dwarf_Unsigned version;
     Dwarf_Small table_count;
-    ret = dwarf_srclines_b(cu_die, &version, &table_count, &lookup_table->ctxts[cu_i], NULL);
+    ret = dwarf_srclines_b(cu_die, &version, &table_count,
+        &lookup_table->ctxts[cu_i], NULL);
     if (ret == DW_DLV_NO_ENTRY) {
         return;
     }
@@ -329,7 +361,8 @@ static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_tab
         Dwarf_Line *linebuf = 0;
         Dwarf_Signed linecount = 0;
         Dwarf_Error err;
-        ret = dwarf_srclines_from_linecontext(lookup_table->ctxts[cu_i], &linebuf, &linecount, &err);
+        ret = dwarf_srclines_from_linecontext(
+            lookup_table->ctxts[cu_i], &linebuf, &linecount, &err);
         if (ret == DW_DLV_ERROR) {
             dwarf_srclines_dealloc_b(lookup_table->ctxts[cu_i]);
             err_handler(err, NULL);
@@ -341,8 +374,10 @@ static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_tab
             Dwarf_Addr lineaddr;
             dwarf_lineaddr(line, &lineaddr, NULL);
             if (prev_line) {
-                for (Dwarf_Addr addr = prev_lineaddr; addr < lineaddr; addr++) {
-                    lookup_table->table[addr - lookup_table->low] = linebuf[i - 1];
+                for (Dwarf_Addr addr = prev_lineaddr;
+                    addr < lineaddr; addr++) {
+                    lookup_table->table[addr - lookup_table->low] =
+                        linebuf[i - 1];
                 }
             }
             Dwarf_Bool is_lne;
@@ -357,29 +392,32 @@ static void populate_lookup_table_die(Dwarf_Debug dbg, lookup_tableT *lookup_tab
     }
 }
 
-static void populate_lookup_table(Dwarf_Debug dbg, lookup_tableT *lookup_table)
+static void populate_lookup_table(Dwarf_Debug dbg,
+    lookup_tableT *lookup_table)
 {
     Dwarf_Bool is_info = true;
     Dwarf_Unsigned next_cu_header;
     Dwarf_Half header_cu_type;
     int ret;
     for (int cu_i = 0;; cu_i++) {
-        ret = dwarf_next_cu_header_d(dbg, is_info, NULL, NULL, NULL, NULL, NULL, NULL,
-                                     NULL, NULL, &next_cu_header, &header_cu_type, NULL);
+        ret = dwarf_next_cu_header_d(dbg, is_info, NULL, NULL,
+            NULL, NULL, NULL, NULL,
+            NULL, NULL, &next_cu_header, &header_cu_type, NULL);
         if (ret == DW_DLV_NO_ENTRY) {
             break;
         }
         Dwarf_Die cu_die = 0;
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
-            populate_lookup_table_die(dbg, lookup_table, cu_i, cu_die);
+            populate_lookup_table_die(dbg, lookup_table,
+                cu_i, cu_die);
             dwarf_dealloc(dbg, cu_die, DW_DLA_DIE);
             cu_die = 0;
         }
     }
 }
 
-static int 
+static int
 create_lookup_table(Dwarf_Debug dbg,
     lookup_tableT *lookup_table)
 {
@@ -412,7 +450,8 @@ create_lookup_table(Dwarf_Debug dbg,
     return 1;
 }
 
-static void delete_lookup_table(lookup_tableT *lookup_table)
+static void
+delete_lookup_table(lookup_tableT *lookup_table)
 {
     free(lookup_table->table);
     lookup_table->table = NULL;
@@ -423,7 +462,8 @@ static void delete_lookup_table(lookup_tableT *lookup_table)
     lookup_table->ctxts = NULL;
 }
 
-static char *get_pc_buf(int argc, char **argv, char *buf, bool do_read_stdin)
+static char *get_pc_buf(int argc, char **argv, char *buf,
+    bool do_read_stdin)
 {
     if (do_read_stdin) {
         return fgets(buf, MAX_ADDR_LEN, stdin);
@@ -436,7 +476,9 @@ static char *get_pc_buf(int argc, char **argv, char *buf, bool do_read_stdin)
     }
 }
 
-static void populate_options(int argc, char *argv[], char **objfile, flagsT *flags)
+static void
+populate_options(int argc, char *argv[], char **objfile,
+    flagsT *flags)
 {
     int c;
     while (1) {
@@ -444,11 +486,11 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
         int option_index = 0;
         static struct option longopts[] =
             {
-             {"addresses", no_argument, 0, 'a'},
-             {"exe", required_argument, 0, 'e'},
-             {"force-batch", no_argument, 0, 'b'},
-             {"force-no-batch", no_argument, 0, 'n'},
-             {0, 0, 0, 0}
+            {"addresses", no_argument, 0, 'a'},
+            {"exe", required_argument, 0, 'e'},
+            {"force-batch", no_argument, 0, 'b'},
+            {"force-no-batch", no_argument, 0, 'n'},
+            {0, 0, 0, 0}
             };
         c = getopt_long(argc, argv, "ae:bn", longopts, &option_index);
         if (c == -1) {
@@ -476,7 +518,8 @@ static void populate_options(int argc, char *argv[], char **objfile, flagsT *fla
     }
 }
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
     flagsT flags = {0};
     char *objfile = "a.out";
@@ -484,14 +527,14 @@ int main(int argc, char *argv[])
 
     int ret;
     Dwarf_Debug dbg;
-    ret = dwarf_init_path(objfile, NULL, 0, 
+    ret = dwarf_init_path(objfile, NULL, 0,
         DW_GROUPNUMBER_ANY, err_handler, NULL, &dbg, NULL);
     if (ret == DW_DLV_NO_ENTRY) {
         errx(EXIT_FAILURE, "%s not found", objfile);
     }
 
     bool do_read_stdin = (optind >= argc);
-    if (! flags.force_nobatchmode && 
+    if (! flags.force_nobatchmode &&
         (flags.force_batchmode || do_read_stdin ||
         (argc + BATCHMODE_HEURISTIC) > optind)) {
         flags.batchmode = true;
@@ -507,8 +550,10 @@ int main(int argc, char *argv[])
         bool is_found = false;
         if (endptr != pc_buf) {
             if (flags.batchmode && lookup_table.table) {
-                if (pc >= lookup_table.low && pc < lookup_table.high) {
-                    Dwarf_Line line = lookup_table.table[pc - lookup_table.low];
+                if (pc >= lookup_table.low &&
+                    pc < lookup_table.high) {
+                    Dwarf_Line line =
+                        lookup_table.table[pc - lookup_table.low];
                     if (line) {
                         print_line(dbg, &flags, line, pc);
                         is_found = true;
