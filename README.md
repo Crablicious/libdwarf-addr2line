@@ -23,15 +23,15 @@ type 'bool' available for the code to compile.
     a list of addresses there. 
 
 Here is an example:
+
     q3 619: ./addr2line -a -e  addr2line 0x2470 0x33b0
     0x0000000000002470
     /home/davea/dwarf/libdwarf-addr2line/addr2line.c:479
     0x00000000000033b0
     /home/davea/dwarf/libdwarf-addr2line/addr2line.c:40
 
-
-    ./addr2line -a -e  addr2line 0x2470 0x33b0
-   
     echo 0x2470 >junk
     ./addr2line -a -e  addr2line <junk
+    0x0000000000002470
+    /home/davea/dwarf/libdwarf-addr2line/addr2line.c:479
 
