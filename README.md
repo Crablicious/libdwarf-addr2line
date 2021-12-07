@@ -3,6 +3,8 @@
 This is a trivial example, the build will
 take some fiddling with the simple Makefile.
 
+This is for latest libdwarf. Currently libdwarf 0.3.1
+
 The code assumes C99 stdbool.h  and
 type 'bool' available for the code to compile.
 
@@ -12,7 +14,8 @@ type 'bool' available for the code to compile.
     where
         -a --addresses  Turns on printing of address before
             the source line text
-        -e --exe  <path> The the path to the object file to read
+        -e --exe  <path> The the path to the object file to read.
+            Path defaults to "a.out"
         -f --force-batch The CU address ranges will be looked
             up once at the start and the generated table used.
         -n --force-no-batch The addresses are looked up
