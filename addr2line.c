@@ -631,12 +631,12 @@ populate_options(int argc, char *argv[], char **objfile,
 int
 main(int argc, char *argv[])
 {
-    flagsT flags = {0};
-    char *objfile = "a.out";
-    populate_options(argc, argv, &objfile, &flags);
-
     int ret;
     Dwarf_Debug dbg;
+    char *objfile = "a.out";
+
+    flagsT flags = {0};
+    populate_options(argc, argv, &objfile, &flags);
     ret = dwarf_init_path(objfile, NULL, 0,
         DW_GROUPNUMBER_ANY, err_handler, NULL, &dbg, NULL);
     if (ret == DW_DLV_NO_ENTRY) {

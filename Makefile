@@ -15,12 +15,7 @@ addr2line: addr2line.c
 .PHONY: clean run
 
 check: addr2line
-	./addr2line -a -e test/test   0x1040
-	./addr2line -a -b -e test/test   0x1040
-	./addr2line -a -n -e test/test   0x1040
-	./addr2line -a -e test/dwarf5test  0x1041 0x1046
-	./addr2line -a -b -e test/dwarf5test  0x1041 0x1046
-	./addr2line -a -n -e test/dwarf5test  0x1041 0x1046
+	sh test/runtest.sh 
 
 
 # One diff happens since batch-mode does not look at DW_AT_ranges and
@@ -30,3 +25,4 @@ clean:
 	rm -f *~
 	rm -f addr2line
 	rm -f addr2line.o
+	rm -f test/junk*
