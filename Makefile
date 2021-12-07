@@ -14,8 +14,9 @@ addr2line: addr2line.c
 
 .PHONY: clean run
 
-run: addr2line
-	./addr2line -a -e addr2line  0x2470
+check: addr2line
+	./addr2line -a -e test/test   0x1040
+	./addr2line -a -e test/dwarf5test  0x1041 0x1046
 
 
 # One diff happens since batch-mode does not look at DW_AT_ranges and
@@ -24,3 +25,4 @@ run: addr2line
 clean:
 	rm -f *~
 	rm -f addr2line
+	rm -f addr2line.o
