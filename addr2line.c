@@ -87,7 +87,7 @@ pc_in_die(Dwarf_Debug dbg, Dwarf_Die die,int version, Dwarf_Addr pc)
         ret = dwarf4_ranges(dbg,die,cu_lowpc,
            &lowest,&highest); 
     }
-    if (pc >= cu_lowpc && pc < cu_highpc) {
+    if (pc >= lowest && pc < highest) {
         return true;
     }
     return false;
@@ -362,6 +362,7 @@ dwarf4_ranges( Dwarf_Debug dbg,
             NULL, &ranges, &count, NULL, NULL);
         for (int i = 0; i < count; i++) {
             Dwarf_Ranges *cur = ranges + i;
+
             if (cur->dwr_type == DW_RANGES_ENTRY) {
                 Dwarf_Addr rng_lowpc, rng_highpc;
                 rng_lowpc = baseaddr + cur->dwr_addr1;
@@ -396,9 +397,9 @@ get_pc_range(Dwarf_Debug dbg,
     Dwarf_Half header_cu_type;
     Dwarf_Half dwversion = 0;
     Dwarf_Half offset_size = 0;
-    *lowest = DW_DLV_BADADDR;
     Dwarf_Attribute attr = 0;
 
+    *lowest = DW_DLV_BADADDR;
     *highest = 0;
     int ret, cu_i;
     for (cu_i = 0;; cu_i++) {
