@@ -5,8 +5,11 @@
 
 /* compiled with
     cc -g -O2 test.c -o test
-    or
     cc -gdwarf-5 -O2 test.c -o dwarf5test
+
+    but the intent is no one ever does these
+    compiles again.
+    To keep the tests working precisely the same.
 */
 
 
