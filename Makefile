@@ -16,7 +16,11 @@ addr2line: addr2line.c
 
 check: addr2line
 	./addr2line -a -e test/test   0x1040
+	./addr2line -a -b -e test/test   0x1040
+	./addr2line -a -n -e test/test   0x1040
 	./addr2line -a -e test/dwarf5test  0x1041 0x1046
+	./addr2line -a -b -e test/dwarf5test  0x1041 0x1046
+	./addr2line -a -n -e test/dwarf5test  0x1041 0x1046
 
 
 # One diff happens since batch-mode does not look at DW_AT_ranges and

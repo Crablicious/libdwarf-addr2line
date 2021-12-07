@@ -40,12 +40,30 @@ err_handler(Dwarf_Error err, Dwarf_Ptr errarg)
         (unsigned long)dwarf_errno(err), dwarf_errmsg(err));
 }
 
+static int dwarf5_ranges( Dwarf_Debug dbg,
+    Dwarf_Die cu_die,
+    Dwarf_Addr cu_lowpc,
+    Dwarf_Addr *lowest,
+    Dwarf_Addr *highest);
+static int dwarf4_ranges( Dwarf_Debug dbg,
+    Dwarf_Die cu_die,
+    Dwarf_Addr cu_lowpc,
+    Dwarf_Addr *lowest,
+    Dwarf_Addr *highest);
+
+
+
 static bool 
-pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
+pc_in_die(Dwarf_Debug dbg, Dwarf_Die die,int version, Dwarf_Addr pc)
 {
     int ret;
-    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR, cu_highpc;
+    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR; 
+    Dwarf_Addr cu_highpc = 0;
     enum Dwarf_Form_Class highpc_cls;
+    bool found =0;
+    Dwarf_Addr lowest = DW_DLV_BADADDR;
+    Dwarf_Addr highest = 0;
+
     ret = dwarf_lowpc(die, &cu_lowpc, NULL);
     if (ret == DW_DLV_OK) {
         if (pc == cu_lowpc) {
@@ -62,42 +80,15 @@ pc_in_die(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Addr pc)
             }
         }
     }
-    Dwarf_Attribute attr;
-    if (dwarf_attr(die, DW_AT_ranges, &attr, NULL) == DW_DLV_OK) {
-        Dwarf_Unsigned offset;
-        if (dwarf_global_formref(attr, &offset, NULL) == DW_DLV_OK) {
-            Dwarf_Signed count = 0;
-            Dwarf_Ranges *ranges = 0;
-            Dwarf_Addr baseaddr = 0;
-            Dwarf_Off  realoffset = 0;
-            Dwarf_Unsigned bytecount = 0;
-            if (cu_lowpc != DW_DLV_BADADDR) {
-                baseaddr = cu_lowpc;
-            }
-            ret = dwarf_get_ranges_b(dbg, offset, die,
-                &realoffset,
-                &ranges, &count, &bytecount, NULL);
-            for (int i = 0; i < count; i++) {
-                Dwarf_Ranges *cur = ranges + i;
-                if (cur->dwr_type == DW_RANGES_ENTRY) {
-                    Dwarf_Addr rng_lowpc, rng_highpc;
-                    rng_lowpc = baseaddr + cur->dwr_addr1;
-                    rng_highpc = baseaddr + cur->dwr_addr2;
-                    if (pc >= rng_lowpc && pc < rng_highpc) {
-                        dwarf_dealloc_ranges(dbg, ranges, count);
-                        dwarf_dealloc(dbg, attr, DW_DLA_ATTR);
-                        return true;
-                    }
-                } else if (cur->dwr_type ==
-                    DW_RANGES_ADDRESS_SELECTION) {
-                    baseaddr = cur->dwr_addr2;
-                } else {  // DW_RANGES_END
-                    baseaddr = cu_lowpc;
-                }
-            }
-            dwarf_dealloc_ranges(dbg, ranges, count);
-        }
-        dwarf_dealloc_attribute(attr);
+    if (version >= DWARF5_VERSION) {
+        ret = dwarf5_ranges(dbg,die,cu_lowpc,
+            &lowest,&highest); 
+    } else {
+        ret = dwarf4_ranges(dbg,die,cu_lowpc,
+           &lowest,&highest); 
+    }
+    if (pc >= cu_lowpc && pc < cu_highpc) {
+        return true;
     }
     return false;
 }
@@ -199,6 +190,8 @@ lookup_pc(Dwarf_Debug dbg,
     Dwarf_Bool is_info = true;
     Dwarf_Unsigned next_cu_header;
     Dwarf_Half header_cu_type;
+    Dwarf_Half dwversion = 0;
+    Dwarf_Half offset_size = 0;
     int ret;
     int cu_i;
     for (int cu_i = 0;; cu_i++) {
@@ -211,7 +204,8 @@ lookup_pc(Dwarf_Debug dbg,
         Dwarf_Die cu_die = 0;
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
-            if (pc_in_die(dbg, cu_die, pc)) {
+            dwarf_get_version_of_die(cu_die,&dwversion,&offset_size);
+            if (pc_in_die(dbg, cu_die,dwversion, pc)) {
                 bool lookup_ret = lookup_pc_cu(dbg, flags,
                     pc, cu_die);
                 dwarf_dealloc_die(cu_die);
@@ -440,13 +434,6 @@ get_pc_range(Dwarf_Debug dbg,
             if (dwversion >= DWARF5_VERSION) {
                 ret = dwarf5_ranges(dbg,cu_die,cu_lowpc,
                     lowest,highest); 
-#if 0
-                if (ret != DW_DLV_OK) {
-                    ret = dwarf4_ranges(dbg,cu_die,cu_lowpc,
-                        lowest,highest); 
-                }
-#endif
-                
             } else {
                 ret = dwarf4_ranges(dbg,cu_die,cu_lowpc,
                     lowest,highest); 

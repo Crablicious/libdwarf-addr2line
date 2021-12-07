@@ -16,7 +16,7 @@ type 'bool' available for the code to compile.
             the source line text
         -e --exe  <path> The the path to the object file to read.
             Path defaults to "a.out"
-        -f --force-batch The CU address ranges will be looked
+        -b --force-batch The CU address ranges will be looked
             up once at the start and the generated table used.
         -n --force-no-batch The addresses are looked up
             independently for each address present.
