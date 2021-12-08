@@ -5,8 +5,12 @@ take some fiddling with the simple Makefile.
 
 This is for latest libdwarf. Currently libdwarf 0.3.1
 
-the batch no-batch options have very different
+The batch no-batch options have very different
 code paths.
+
+The program has the same name as the GNU binutils-gdb
+addr2line, but neither the options nor the source
+code have any similarity whatever to the GNU addr2line.
 
 The code assumes C99 as it uses stdbool.h
 and uses declarations after some code lines.
