@@ -1,3 +1,8 @@
+### Copyright (C) 2021 David Anderson
+### This Makefile is hereby placed into the Public Domain
+### for use by anyone and use in any way.
+
+
 IDIR=/usr/include/libdwarf
 IDIR=/home/davea/dwarf/code/src/lib/libdwarf
 LDIR=/usr/lib/

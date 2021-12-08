@@ -5,8 +5,12 @@ take some fiddling with the simple Makefile.
 
 This is for latest libdwarf. Currently libdwarf 0.3.1
 
-The code assumes C99 stdbool.h  and
-type 'bool' available for the code to compile.
+the batch no-batch options have very different
+code paths.
+
+The code assumes C99 as it uses stdbool.h
+and uses declarations after some code lines.
+This was the choice of the original author.
 
 ### Usage
 
