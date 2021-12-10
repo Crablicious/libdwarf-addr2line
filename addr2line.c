@@ -606,6 +606,34 @@ get_pc_buf(int argc, char **argv, char *buf,
     }
 }
 
+char *usagestrings[] = {
+"addr2line [ -h] [-a] [-e <objectpath>] [-b] [-n] [address] ...",
+"where",
+"-a --addresses  Turns on printing of address before",
+"    the source line text",
+"-e --exe  <path> The the path to the object file to read.",
+"    Path defaults to \"a.out\"",
+"-b --force-batch The CU address ranges will be looked",
+"    up once at the start and the generated table used.",
+"-n --force-no-batch The addresses are looked up",
+"    independently for each address present.",
+"    In certain cases the no-batch will be overridden",
+"    and batching used.",
+"-h --help  Prints a help message and stops.",
+0
+};
+
+static void
+usage(void)
+{
+    char **u = usagestrings;
+
+    for( ; *u ; u++) {
+        printf("%s\n",*u);
+    }
+    exit(0);
+}
+
 static void
 populate_options(int argc, char *argv[], char **objfile,
     flagsT *flags)
@@ -617,11 +645,13 @@ populate_options(int argc, char *argv[], char **objfile,
             {
             {"addresses", no_argument, 0, 'a'},
             {"exe", required_argument, 0, 'e'},
+            {"help", no_argument, 0, 'h'},
             {"force-batch", no_argument, 0, 'b'},
             {"force-no-batch", no_argument, 0, 'n'},
             {0, 0, 0, 0}
             };
-        c = getopt_long(argc, argv, "ae:bn", longopts, &option_index);
+        c = getopt_long(argc, argv, "ae:hbn", longopts,
+            &option_index);
         if (c == -1) {
             break;
         }
@@ -634,6 +664,9 @@ populate_options(int argc, char *argv[], char **objfile,
             break;
         case 'b':
             flags->force_batchmode = TRUE;
+            break;
+        case 'h':
+            usage();
             break;
         case 'n':
             flags->force_nobatchmode = TRUE;

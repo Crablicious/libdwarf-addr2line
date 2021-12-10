@@ -16,7 +16,7 @@ code have any similarity whatever to the GNU addr2line.
 
 ### Usage
 
-    addr2line [-a] [-e <objectpath>] [-b] [-n] [address] ...
+    addr2line [ -h] [-a] [-e <objectpath>] [-b] [-n] [address] ...
     where
         -a --addresses  Turns on printing of address before
             the source line text
@@ -28,6 +28,7 @@ code have any similarity whatever to the GNU addr2line.
             independently for each address present.
             In certain cases the no-batch will be overridden
             and batching used.
+        -h --help  Prints a help message and stops.
     if no addresses present the program reads STDIN, expecting
     a list of addresses there. 
 
