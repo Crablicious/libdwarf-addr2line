@@ -3,12 +3,17 @@
 ### for use by anyone and use in any way.
 
 
+### standard places
 IDIR=/usr/include/libdwarf
-IDIR=/home/davea/dwarf/code/src/lib/libdwarf
 LDIR=/usr/lib/
+### comment these next two out or alter them for your environment
+IDIR=/home/davea/dwarf/code/src/lib/libdwarf
 LDIR=/var/tmp/bld/src/lib/libdwarf/.libs
+
 CC=gcc
 CFLAGS=-O2 -g -I$(IDIR) -L$(LDIR)
+### Using the longer set of compiler options
+CFLAGS=-O2 -g -I$(IDIR) -L$(LDIR) -Wall -Wextra -Wpointer-arith -Wmissing-declarations -Wcomment -Wformat -Wpedantic -Wuninitialized -Wshadow -Werror -Wno-long-long
 LDFLAGS=
 LIBNAME=libdwarf.a
 

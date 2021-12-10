@@ -2,8 +2,10 @@
 
 This is a trivial example, the build will
 take some fiddling with the simple Makefile.
+See the comments in the Makefile.
 
-This is for latest libdwarf. Currently libdwarf 0.3.1
+This is for latest libdwarf,
+which is currently libdwarf 0.3.1
 
 The batch no-batch options have very different
 code paths.
@@ -11,10 +13,6 @@ code paths.
 The program has the same name as the GNU binutils-gdb
 addr2line, but neither the options nor the source
 code have any similarity whatever to the GNU addr2line.
-
-The code assumes C99 as it uses stdbool.h
-and uses declarations after some code lines.
-This was the choice of the original author.
 
 ### Usage
 
