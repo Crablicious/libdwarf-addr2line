@@ -1,9 +1,15 @@
+/*  addr2line.c
+
+The code does not attempt to report details
+when an unexpected DW_DLV_NO_ENTRY is received
+from libdwarf.  It just silently moves on.
+*/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h> /* C99 for bool type */
 #include <unistd.h>
 #include <getopt.h>
-#include <err.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -16,6 +22,10 @@
 #define MAX_ADDR_LEN 20
 #define BATCHMODE_HEURISTIC 100
 #define DWARF5_VERSION  5
+#define TRUE 1
+#define FALSE 0
+
+static const char *objfile_name = "<none>";
 
 typedef struct flags {
     bool addresses;
@@ -33,11 +43,24 @@ typedef struct lookup_table {
     Dwarf_Addr high;
 } lookup_tableT;
 
-static void 
+static void
+fail_exit(const char *msg) {
+    printf("addr2line failure reading %s: %s\n",
+        objfile_name,
+        msg);
+    exit(1);
+}
+
+/*  We do not need the errarg */
+static void
 err_handler(Dwarf_Error err, Dwarf_Ptr errarg)
 {
-    errx(EXIT_FAILURE, "libdwarf error: %lu %s",
-        (unsigned long)dwarf_errno(err), dwarf_errmsg(err));
+    printf("libdwarf error reading %s: %lu %s",
+        objfile_name,
+        (unsigned long)dwarf_errno(err),
+        dwarf_errmsg(err));
+    printf("Giving up");
+    exit(1);
 }
 
 static int dwarf5_ranges( Dwarf_Debug dbg,
@@ -51,13 +74,11 @@ static int dwarf4_ranges( Dwarf_Debug dbg,
     Dwarf_Addr *lowest,
     Dwarf_Addr *highest);
 
-
-
-static bool 
+static bool
 pc_in_die(Dwarf_Debug dbg, Dwarf_Die die,int version, Dwarf_Addr pc)
 {
     int ret;
-    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR; 
+    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR;
     Dwarf_Addr cu_highpc = 0;
     enum Dwarf_Form_Class highpc_cls;
     bool found =0;
@@ -82,10 +103,10 @@ pc_in_die(Dwarf_Debug dbg, Dwarf_Die die,int version, Dwarf_Addr pc)
     }
     if (version >= DWARF5_VERSION) {
         ret = dwarf5_ranges(dbg,die,cu_lowpc,
-            &lowest,&highest); 
+            &lowest,&highest);
     } else {
         ret = dwarf4_ranges(dbg,die,cu_lowpc,
-           &lowest,&highest); 
+            &lowest,&highest);
     }
     if (pc >= lowest && pc < highest) {
         return true;
@@ -99,17 +120,17 @@ print_line(Dwarf_Debug dbg,
     Dwarf_Line line,
     Dwarf_Addr pc)
 {
-    char *linesrc;
-    Dwarf_Unsigned lineno;
+    char *         linesrc = "??";
+    Dwarf_Unsigned lineno = 0;
+    int            ret = 0;
+
     if (flags->addresses) {
         printf("%#018" DW_PR_DUx "\n", pc);
     }
     if (line) {
+        /*  These never return DW_DLV_NO_ENTRY */
         dwarf_linesrc(line, &linesrc, NULL);
         dwarf_lineno(line, &lineno, NULL);
-    } else {
-        linesrc = "??";
-        lineno = 0;
     }
     printf("%s:%" DW_PR_DUu "\n", linesrc, lineno);
     if (line) {
@@ -253,7 +274,7 @@ get_pc_range_die(Dwarf_Die die,
 }
 
 static int
-dwarf5_ranges( Dwarf_Debug dbg, 
+dwarf5_ranges( Dwarf_Debug dbg,
     Dwarf_Die cu_die,
     Dwarf_Addr cu_lowpc,
     Dwarf_Addr *lowest,
@@ -275,21 +296,18 @@ dwarf5_ranges( Dwarf_Debug dbg,
         Dwarf_Unsigned rlesetoffset = 0;
         Dwarf_Unsigned rnglists_count = 0;
         Dwarf_Rnglists_Head head = 0;
-        res = dwarf_whatform(attr,&attrform,NULL);
-        if (res != DW_DLV_OK) {
-            printf("FAIL something bad about attribute\n");
-            exit(1);
-        }
+        dwarf_whatform(attr,&attrform,NULL);
 
         /* offset is in .debug_rnglists */
         res = dwarf_rnglists_get_rle_head(attr, attrform,offset,
             &head,
             &rnglists_count,&rlesetoffset,NULL);
         if (res != DW_DLV_OK) {
+            /* ASSERT: is DW_DLV_NO_ENTRY */
             dwarf_dealloc_attribute(attr);
             return res;
         }
-        for( ; i < rnglists_count; ++i) {
+        for ( ; i < rnglists_count; ++i) {
             unsigned entrylen = 0;
             unsigned rle_val = 0;
             Dwarf_Unsigned raw1 = 0;
@@ -302,6 +320,7 @@ dwarf5_ranges( Dwarf_Debug dbg,
                 i,&entrylen,&rle_val,&raw1,&raw2,
                 &unavail,&cooked1,&cooked2,NULL);
             if (res != DW_DLV_OK) {
+                /* ASSERT: is DW_DLV_NO_ENTRY */
                 continue;
             }
             if (unavail) {
@@ -315,9 +334,9 @@ dwarf5_ranges( Dwarf_Debug dbg,
                 break;
             case DW_RLE_offset_pair:
             case DW_RLE_startx_endx:
-            case DW_RLE_start_end:  
+            case DW_RLE_start_end:
             case DW_RLE_startx_length:
-            case DW_RLE_start_length: 
+            case DW_RLE_start_length:
                 if (cooked1 < *lowest) {
                     *lowest = cooked1;
                 }
@@ -327,7 +346,7 @@ dwarf5_ranges( Dwarf_Debug dbg,
             default:
                 /* Something is wrong. */
                 break;
-                
+
             }
         }
         dwarf_dealloc_rnglists_head(head);
@@ -337,7 +356,7 @@ dwarf5_ranges( Dwarf_Debug dbg,
 }
 
 static int
-dwarf4_ranges( Dwarf_Debug dbg, 
+dwarf4_ranges( Dwarf_Debug dbg,
     Dwarf_Die cu_die,
     Dwarf_Addr cu_lowpc,
     Dwarf_Addr *lowest,
@@ -434,10 +453,10 @@ get_pc_range(Dwarf_Debug dbg,
             }
             if (dwversion >= DWARF5_VERSION) {
                 ret = dwarf5_ranges(dbg,cu_die,cu_lowpc,
-                    lowest,highest); 
+                    lowest,highest);
             } else {
                 ret = dwarf4_ranges(dbg,cu_die,cu_lowpc,
-                    lowest,highest); 
+                    lowest,highest);
             }
             if (ret == DW_DLV_ERROR) {
                 return 0;
@@ -468,19 +487,22 @@ populate_lookup_table_die(Dwarf_Debug dbg,
     if (table_count == 1) {
         Dwarf_Line *linebuf = 0;
         Dwarf_Signed linecount = 0;
-        Dwarf_Error err;
+
         ret = dwarf_srclines_from_linecontext(
-            lookup_table->ctxts[cu_i], &linebuf, &linecount, &err);
-        if (ret == DW_DLV_ERROR) {
+            lookup_table->ctxts[cu_i], &linebuf, &linecount, NULL);
+        if (ret == DW_DLV_NO_ENTRY) {
             dwarf_srclines_dealloc_b(lookup_table->ctxts[cu_i]);
-            err_handler(err, NULL);
+            return;
         }
         Dwarf_Addr prev_lineaddr;
         Dwarf_Line prev_line = 0;
         for (int i = 0; i < linecount; i++) {
             Dwarf_Line line = linebuf[i];
-            Dwarf_Addr lineaddr;
-            dwarf_lineaddr(line, &lineaddr, NULL);
+            Dwarf_Addr lineaddr = 0;
+            ret = dwarf_lineaddr(line, &lineaddr, NULL);
+            if (ret == DW_DLV_NO_ENTRY) {
+                continue;
+            }
             if (prev_line) {
                 for (Dwarf_Addr addr = prev_lineaddr;
                     addr < lineaddr; addr++) {
@@ -488,8 +510,11 @@ populate_lookup_table_die(Dwarf_Debug dbg,
                         linebuf[i - 1];
                 }
             }
-            Dwarf_Bool is_lne;
-            dwarf_lineendsequence(line, &is_lne, NULL);
+            Dwarf_Bool is_lne = 0;
+            ret = dwarf_lineendsequence(line, &is_lne, NULL);
+            if (ret == DW_DLV_NO_ENTRY) {
+                continue;
+            }
             if (is_lne) {
                 prev_line = 0;
             } else {
@@ -500,7 +525,7 @@ populate_lookup_table_die(Dwarf_Debug dbg,
     }
 }
 
-static void 
+static void
 populate_lookup_table(Dwarf_Debug dbg,
     lookup_tableT *lookup_table)
 {
@@ -637,10 +662,11 @@ main(int argc, char *argv[])
 
     flagsT flags = {0};
     populate_options(argc, argv, &objfile, &flags);
+    objfile_name = objfile;
     ret = dwarf_init_path(objfile, NULL, 0,
         DW_GROUPNUMBER_ANY, err_handler, NULL, &dbg, NULL);
     if (ret == DW_DLV_NO_ENTRY) {
-        errx(EXIT_FAILURE, "%s not found", objfile);
+        fail_exit("Unable to open file");
     }
 
     bool do_read_stdin = (optind >= argc);
@@ -651,7 +677,10 @@ main(int argc, char *argv[])
     }
     lookup_tableT lookup_table;
     if (flags.batchmode) {
-        create_lookup_table(dbg, &lookup_table);
+        ret = create_lookup_table(dbg, &lookup_table);
+        if (ret == DW_DLV_NO_ENTRY) {
+            fail_exit("Unable to create lookup table");
+        }
     }
 
     char buf[MAX_ADDR_LEN], *pc_buf, *endptr;
