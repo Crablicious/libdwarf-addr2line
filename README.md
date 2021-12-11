@@ -1,18 +1,22 @@
 # libdwarf-addr2line
 
-This is a trivial example, the build will
-take some fiddling with the simple Makefile.
+This is an example of accessing a file name and line number
+based on a code address in an object file. 
+A build will take a little fiddling with the simple Makefile.
 See the comments in the Makefile.
-
-This is for latest libdwarf,
-which is currently libdwarf 0.3.1
-
-The batch no-batch options have very different
-code paths.
 
 I hope to get in touch with the original author
 (github name Crablicious) by email, but have been
-unable to do that so far (as of 11 December 2021).
+unable to make contact so far (as of 11 December 2021).
+
+The master branch requires latest libdwarf,
+which is currently libdwarf-0.3.1.
+
+Branch v20210528 requires libdwarf-20210528, the
+final pre-semantic-versioning libdwarf, a version
+in many Linux distributions.
+
+The batch no-batch options have very different code paths.
 
 The program has the same name as the GNU binutils-gdb
 addr2line, but neither the options nor the source
