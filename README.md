@@ -10,6 +10,10 @@ which is currently libdwarf 0.3.1
 The batch no-batch options have very different
 code paths.
 
+I hope to get in touch with the original author
+(github name Crablicious) by email, but have been
+unable to do that so far (as of 11 December 2021).
+
 The program has the same name as the GNU binutils-gdb
 addr2line, but neither the options nor the source
 code have any similarity whatever to the GNU addr2line.
