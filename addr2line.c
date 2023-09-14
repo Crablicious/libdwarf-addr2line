@@ -63,7 +63,7 @@ err_handler(Dwarf_Error err, Dwarf_Ptr errarg)
     exit(1);
 }
 
-static int 
+static int
 dwarf5_ranges(Dwarf_Die cu_die,
     Dwarf_Addr *lowest,
     Dwarf_Addr *highest);
@@ -275,6 +275,17 @@ get_pc_range_die(Dwarf_Die die,
 #endif
 
 static int
+get_rnglist_offset(Dwarf_Attribute attr, Dwarf_Unsigned* offset) {
+    Dwarf_Half attrform = 0;
+    dwarf_whatform(attr, &attrform, NULL);
+    if (attrform == DW_FORM_rnglistx) {
+        return dwarf_formudata(attr, offset, NULL);
+    } else {
+        return dwarf_global_formref(attr, offset, NULL);
+    }
+}
+
+static int
 dwarf5_ranges(Dwarf_Die cu_die,
     Dwarf_Addr *lowest,
     Dwarf_Addr *highest)
@@ -289,7 +300,7 @@ dwarf5_ranges(Dwarf_Die cu_die,
     if (res != DW_DLV_OK) {
         return res;
     }
-    if (dwarf_global_formref(attr, &offset, NULL) == DW_DLV_OK) {
+    if (get_rnglist_offset(attr, &offset) == DW_DLV_OK) {
         Dwarf_Unsigned rlesetoffset = 0;
         Dwarf_Unsigned rnglists_count = 0;
         Dwarf_Rnglists_Head head = 0;
@@ -687,8 +698,8 @@ main(int argc, char *argv[])
     Dwarf_Debug dbg;
     char *objfile = "a.out";
     Dwarf_Bool do_read_stdin = FALSE;
-    char buf[MAX_ADDR_LEN]; 
-    char *pc_buf = 0; 
+    char buf[MAX_ADDR_LEN];
+    char *pc_buf = 0;
     char *endptr = 0;
     lookup_tableT lookup_table;
     Dwarf_Ptr errarg = 0;
