@@ -12,8 +12,8 @@ from libdwarf.  It just silently moves on.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include "libdwarf.h"
 #include "dwarf.h"
+#include "libdwarf.h"
 
 #define DW_PR_DUx "llx"
 #define DW_PR_DUu "llu"
@@ -23,6 +23,8 @@ from libdwarf.  It just silently moves on.
 #define DWARF5_VERSION  5
 #define TRUE 1
 #define FALSE 0
+
+#define HIGHADDR (Dwarf_Unsigned)0xffffffffffffffff
 
 static const char *objfile_name = "<none>";
 
@@ -77,10 +79,10 @@ static Dwarf_Bool
 pc_in_die(Dwarf_Debug dbg, Dwarf_Die die,int version, Dwarf_Addr pc)
 {
     int ret;
-    Dwarf_Addr cu_lowpc = DW_DLV_BADADDR;
+    Dwarf_Addr cu_lowpc = HIGHADDR;
     Dwarf_Addr cu_highpc = 0;
     enum Dwarf_Form_Class highpc_cls;
-    Dwarf_Addr lowest = DW_DLV_BADADDR;
+    Dwarf_Addr lowest = HIGHADDR;
     Dwarf_Addr highest = 0;
 
     ret = dwarf_lowpc(die, &cu_lowpc, NULL);
@@ -371,7 +373,7 @@ dwarf4_ranges( Dwarf_Debug dbg,
         Dwarf_Signed count = 0;
         Dwarf_Ranges *ranges = 0;
         Dwarf_Addr baseaddr = 0;
-        if (cu_lowpc != DW_DLV_BADADDR) {
+        if (cu_lowpc != HIGHADDR) {
             baseaddr = cu_lowpc;
         }
         res = dwarf_get_ranges_b(dbg, offset, cu_die,
@@ -414,7 +416,7 @@ get_pc_range(Dwarf_Debug dbg,
     Dwarf_Half dwversion = 0;
     Dwarf_Half offset_size = 0;
 
-    *lowest = DW_DLV_BADADDR;
+    *lowest = HIGHADDR;
     *highest = 0;
     int ret, cu_i;
     for (cu_i = 0;; cu_i++) {
@@ -427,7 +429,7 @@ get_pc_range(Dwarf_Debug dbg,
         Dwarf_Die cu_die = 0;
         ret = dwarf_siblingof_b(dbg, 0, is_info, &cu_die, NULL);
         if (ret == DW_DLV_OK) {
-            Dwarf_Addr cu_lowpc = DW_DLV_BADADDR, cu_highpc;
+            Dwarf_Addr cu_lowpc = HIGHADDR, cu_highpc;
             enum Dwarf_Form_Class highpc_cls;
 
             dwarf_get_version_of_die(cu_die,&dwversion,&offset_size);
@@ -462,7 +464,7 @@ get_pc_range(Dwarf_Debug dbg,
         }
     }
     *cu_cnt = cu_i;
-    return (*lowest != DW_DLV_BADADDR && *highest != 0);
+    return (*lowest != HIGHADDR && *highest != 0);
 }
 
 static void

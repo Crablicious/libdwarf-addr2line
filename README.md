@@ -7,14 +7,7 @@ See the comments in the Makefile.
 
 I hope to get in touch with the original author
 (github name Crablicious) by email, but have been
-unable to make contact so far (as of 11 December 2021).
-
-The master branch requires latest libdwarf,
-which is currently libdwarf-0.3.1.
-
-Branch v20210528 requires libdwarf-20210528, the
-final pre-semantic-versioning libdwarf, a version
-in many Linux distributions.
+unable to make contact so far.
 
 The batch no-batch options have very different code paths.
 

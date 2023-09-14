@@ -8,7 +8,7 @@ IDIR=/usr/include/libdwarf
 LDIR=/usr/lib/
 ### comment these next two out or alter them for your environment
 IDIR=/home/davea/dwarf/code/src/lib/libdwarf
-LDIR=/var/tmp/bld/src/lib/libdwarf/.libs
+LDIR=/var/tmp/builds/bld/src/lib/libdwarf/.libs
 
 CC=gcc
 CFLAGS=-O2 -g -I$(IDIR) -L$(LDIR)
@@ -17,7 +17,7 @@ CFLAGS=-O2 -g -I$(IDIR) -L$(LDIR) -Wall -Wextra -Wpointer-arith -Wmissing-declar
 LDFLAGS=
 LIBNAME=libdwarf.a
 
-LIBS=$(LDIR)/$(LIBNAME) -lz
+LIBS=$(LDIR)/$(LIBNAME) -lz -lzstd
 
 addr2line: addr2line.c
 	$(CC) -o $@ $<  $(CFLAGS) $(LDFLAGS) $(LIBS)
